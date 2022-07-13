@@ -15,8 +15,25 @@ use slog_term::TermDecorator;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
+
+struct ProgramNotFoundError(String);
+
+impl Debug for ProgramNotFoundError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for ProgramNotFoundError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for ProgramNotFoundError {}
 
 lazy_static! {
     static ref LOGGER: Logger = Logger::root(
@@ -107,7 +124,10 @@ fn load_filter(interface_name: &str, message: &str) -> Result<(), Box<dyn Error>
             idx += 1;
         });
 
-    let prog: &mut SchedClassifier = bpf.program_mut("arp_filter")?.try_into()?;
+    let prog: &mut SchedClassifier = bpf
+        .program_mut("arp_filter")
+        .ok_or_else(|| ProgramNotFoundError("arp_filter".to_owned()))?
+        .try_into()?;
     prog.load()?;
     let mut linkref = prog.attach(interface_name, TcAttachType::Egress)?;
     debug!(LOGGER, "ARP filter loaded and attached.");
